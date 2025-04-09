@@ -146,7 +146,14 @@ class DatabaseManager:
             print(f"Error retrieving subscriptions: {e}")
             
             return []
-    
+    async def remove_subscription(self, user_id, anime_id):
+        """Remove a subscription"""
+        try:
+            query = "DELETE FROM subscriptions WHERE user_id = %s AND anime_id = %s"
+            return await self.execute_query(query, (user_id, anime_id))
+        except Exception as e:
+            print(f"Error removing subscription: {e}")
+            return None
     async def get_anime_subscribers(self, anime_id):
         query = "SELECT user_id FROM subscriptions WHERE anime_id = %s"
         return await self.execute_query(query, (anime_id,), fetch=True)
