@@ -2,7 +2,7 @@ import nextcord
 from nextcord.ext import commands
 from nextcord import Interaction, Embed, SlashOption
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import os
 import mysql.connector
@@ -420,18 +420,58 @@ class ModCog(commands.Cog):
         )
         
         await interaction.response.send_message(embed=embed)
-    @nextcord.slash_command(name="purge", description="Delete a specified number of messages")
+    @nextcord.slash_command(name="purge", description="Quickly delete a specified number of messages from the channel.")
     async def purge(
         self, 
-        interaction: Interaction, 
-        number: int = SlashOption(description="Number of messages to delete", min_value=1, max_value=100)
+        interaction: nextcord.Interaction, 
+        amount: int = SlashOption(
+            name="amount",
+            description="Number of messages to delete",
+            required=True
+        )
     ):
+        
         if not interaction.user.guild_permissions.manage_messages:
-            return await interaction.response.send_message("You don't have permission to use this command!", ephemeral=True)
-            
+            await interaction.response.send_message(
+                "❌ You do not have permission to use this command.", ephemeral=True
+            )
+            return
+        
+        
         await interaction.response.defer(ephemeral=True)
-        deleted = await interaction.channel.purge(limit=number)
-        await interaction.followup.send(f"Deleted {len(deleted)} messages.", ephemeral=True)
+        
+        
+        amount = min(amount, 1000)
+        
+        try:
+            
+            messages = []
+            async for message in interaction.channel.history(limit=amount + 50):
+                
+                if (nextcord.utils.utcnow() - message.created_at).days < 14:
+                    messages.append(message)
+                    if len(messages) >= amount:
+                        break
+            
+            
+            if not messages:
+                await interaction.followup.send("No messages could be deleted (Messages age > 14 days old).", ephemeral=True)
+                return
+                
+            
+            deleted_count = 0
+            chunks = [messages[i:i + 100] for i in range(0, len(messages), 100)]
+            
+            for chunk in chunks:
+                if chunk:
+                    await interaction.channel.delete_messages(chunk)
+                    deleted_count += len(chunk)
+                    
+            
+            await interaction.followup.send(f"✅ Successfully deleted {deleted_count} messages.", ephemeral=True)
+            
+        except Exception as e:
+            await interaction.followup.send(f"An error occurred: {str(e)}", ephemeral=True)
 
 def setup(bot):
     bot.add_cog(ModCog(bot))
