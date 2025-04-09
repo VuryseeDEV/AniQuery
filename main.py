@@ -24,12 +24,12 @@ bot = commands.Bot(command_prefix="$", intents=intents)
 async def set_rich_presence():
     activity = nextcord.Activity(
         type=nextcord.ActivityType.watching,
-        name="the sunset...",)
+        name="/anime",)
     await bot.change_presence(status=nextcord.Status.dnd, activity=activity)
 
 @bot.event
 async def on_ready():
-    print(f"==================\nLogged in as {bot.user} (ID: {bot.user.id})")
+    print(f"========================================\nLogged in as {bot.user} (ID: {bot.user.id})")
     await set_rich_presence()
 
     print("Syncing application commands...")
