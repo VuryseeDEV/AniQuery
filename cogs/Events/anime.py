@@ -782,7 +782,7 @@ class AnimeCog(commands.Cog):
         
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @tasks.loop(minutes=15)
+    @tasks.loop(minutes=20)
     async def check_airing(self): #TEST
         """Check for recently aired episodes and notify subscribers"""
         try:
