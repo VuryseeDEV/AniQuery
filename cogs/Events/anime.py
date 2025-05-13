@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 import time
 
 class AnimeSubscribeView(nextcord.ui.View):
-    """View for subscribing to an anime series"""
     def __init__(self, anime_id, anime_title, user_id, db):
         super().__init__(timeout=60)
         self.anime_id = anime_id
@@ -21,14 +20,12 @@ class AnimeSubscribeView(nextcord.ui.View):
             await interaction.response.send_message("This button is not for you!", ephemeral=True)
             return
             
-        
         await self.db.add_subscription(self.user_id, self.anime_id, self.anime_title)
         
         await interaction.response.send_message(f"✅ You've subscribed to **{self.anime_title}**! You'll receive notifications when new episodes air.", ephemeral=True)
         self.stop()
 
 class SeasonSelect(nextcord.ui.Select):
-    """Select dropdown for different seasons of a series"""
     def __init__(self, seasons, user_id, db):
         self.user_id = user_id
         self.db = db
@@ -53,20 +50,17 @@ class SeasonSelect(nextcord.ui.Select):
         selected_id = self.values[0]
         selected_anime = self.seasons[selected_id]
         
-        
         await self.db.add_subscription(self.user_id, int(selected_id), selected_anime["title"])
         
         await interaction.response.send_message(f"✅ You've subscribed to **{selected_anime['title']}**! You'll receive notifications when new episodes air.", ephemeral=True)
         self.view.stop()
 
 class SeasonSelectView(nextcord.ui.View):
-    """View for selecting a season from related anime series"""
     def __init__(self, seasons, user_id, db):
         super().__init__(timeout=60)
         self.add_item(SeasonSelect(seasons, user_id, db))
 
 class SubscriptionPaginator(nextcord.ui.View):
-    """Paginator for user's anime subscriptions"""
     def __init__(self, subscriptions, user_id, db):
         super().__init__(timeout=180)
         self.subscriptions = subscriptions
@@ -78,9 +72,7 @@ class SubscriptionPaginator(nextcord.ui.View):
         self.update_buttons()
 
     def update_buttons(self):
-        """Update buttons based on current page and subscription count"""
         self.clear_items()
-        
         
         if len(self.subscriptions) > self.items_per_page:
             if self.current_page > 0:
@@ -92,7 +84,6 @@ class SubscriptionPaginator(nextcord.ui.View):
                 next_button = nextcord.ui.Button(label="Next", style=nextcord.ButtonStyle.secondary)
                 next_button.callback = self.next_page
                 self.add_item(next_button)
-        
         
         start_idx = self.current_page * self.items_per_page
         end_idx = min(start_idx + self.items_per_page, len(self.subscriptions))
@@ -115,7 +106,6 @@ class SubscriptionPaginator(nextcord.ui.View):
                 self.add_item(unsub_select)
 
     async def get_current_page_embed(self):
-        """Create embed for current page of subscriptions"""
         start_idx = self.current_page * self.items_per_page
         end_idx = min(start_idx + self.items_per_page, len(self.subscriptions))
         page_subs = self.subscriptions[start_idx:end_idx]
@@ -151,7 +141,6 @@ class SubscriptionPaginator(nextcord.ui.View):
         return embed
     
     async def previous_page(self, interaction: nextcord.Interaction):
-        """Go to previous page of subscriptions"""
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This menu is not for you!", ephemeral=True)
             return
@@ -166,7 +155,6 @@ class SubscriptionPaginator(nextcord.ui.View):
             print(f"Error updating pagination: {e}")
     
     async def next_page(self, interaction: nextcord.Interaction):
-        """Go to next page of subscriptions"""
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This menu is not for you!", ephemeral=True)
             return
@@ -181,7 +169,6 @@ class SubscriptionPaginator(nextcord.ui.View):
             print(f"Error updating pagination: {e}")
             
     async def unsub_callback(self, interaction: nextcord.Interaction):
-        """Handle unsubscribe selection"""
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("This menu is not for you!", ephemeral=True)
             return
@@ -189,15 +176,12 @@ class SubscriptionPaginator(nextcord.ui.View):
         try:
             selected_id = int(interaction.data['values'][0])
             
-            
             await self.db.remove_subscription(self.user_id, selected_id)
-            
             
             for i, sub in enumerate(self.subscriptions):
                 if sub["anime_id"] == selected_id:
                     del self.subscriptions[i]
                     break
-            
             
             self.update_buttons()
             embed = await self.get_current_page_embed()
@@ -207,7 +191,6 @@ class SubscriptionPaginator(nextcord.ui.View):
             await interaction.response.send_message("An error occurred while unsubscribing. Please try again.", ephemeral=True)
     
     async def on_timeout(self):
-        """Handle view timeout"""
         if self.message:
             try:
                 await self.message.edit(view=None)
@@ -215,44 +198,36 @@ class SubscriptionPaginator(nextcord.ui.View):
                 pass
 
 class AnimeCog(commands.Cog):
-    """Cog for managing anime subscriptions and notifications"""
     def __init__(self, bot):
         self.bot = bot
         from utils.db import DatabaseManager
         self.db = DatabaseManager(bot)
         self.session = None
         
-        
         self.check_airing.start()
-        
         
         bot.loop.create_task(self.setup())
         
     async def setup(self):
-        """Setup the database and other resources"""
         await self.bot.wait_until_ready()
         await self.db.setup_database()
         
     def cog_unload(self):
-        """Clean up resources when cog is unloaded"""
         self.check_airing.cancel()
         if self.session and not self.session.closed:
             asyncio.create_task(self.session.close())
             
     async def get_session(self):
-        """Get or create aiohttp session"""
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession()
         return self.session
             
     async def query_anilist(self, query, variables=None):
-        """Send GraphQL query to AniList API with rate limiting handling"""
         if variables is None:
             variables = {}
             
         session = await self.get_session()
         url = 'https://graphql.anilist.co'
-        
         
         await asyncio.sleep(0.5)
         
@@ -274,7 +249,7 @@ class AnimeCog(commands.Cog):
                         print(f"AniList API error: Status {response.status}, {await response.text()}")
                         if retry_count < max_retries - 1:
                             retry_count += 1
-                            await asyncio.sleep(2 ** retry_count)  
+                            await asyncio.sleep(2 ** retry_count)
                             continue
                         return {"errors": [{"message": f"API responded with status {response.status}"}]}
                     
@@ -283,7 +258,7 @@ class AnimeCog(commands.Cog):
                 print(f"Error querying AniList API: {e}")
                 if retry_count < max_retries - 1:
                     retry_count += 1
-                    await asyncio.sleep(2 ** retry_count)  
+                    await asyncio.sleep(2 ** retry_count)
                     continue
                 return {"errors": [{"message": str(e)}]}
         
@@ -291,15 +266,12 @@ class AnimeCog(commands.Cog):
 
     @nextcord.slash_command(name="anime", description="Anime commands")
     async def anime(self, interaction: nextcord.Interaction):
-        """Base anime command group"""
         pass
         
     @anime.subcommand(name="search", description="Search for an anime to subscribe")
     async def anime_search(self, interaction: nextcord.Interaction, query: str):
-        """Search for an anime on AniList and display details"""
         try:
             await interaction.response.defer()
-            
             
             anilist_query = '''
             query ($search: String) {
@@ -351,7 +323,6 @@ class AnimeCog(commands.Cog):
             }
             '''
             
-            
             result = await self.query_anilist(anilist_query, {'search': query})
             
             if 'errors' in result:
@@ -364,11 +335,9 @@ class AnimeCog(commands.Cog):
                 await interaction.followup.send("No results found. Try a different search term.")
                 return
                 
-            anime = anime_list[0]  
-            
+            anime = anime_list[0]
             
             await self.db.cache_anime(anime)
-            
             
             embed = nextcord.Embed(title=anime['title']['romaji'], url=anime['siteUrl'], color=0x00A8FF)
             
@@ -376,7 +345,6 @@ class AnimeCog(commands.Cog):
                 embed.add_field(name="English Title", value=anime['title']['english'], inline=False)
                 
             if anime['description']:
-                
                 description = anime['description'].replace('<br>', '\n').replace('<i>', '*').replace('</i>', '*')
                 if len(description) > 1024:
                     description = description[:1021] + "..."
@@ -412,7 +380,6 @@ class AnimeCog(commands.Cog):
                 
             embed.set_footer(text=f"Data from AniList • ID: {anime['id']}")
             
-            
             related_seasons = []
             
             if anime['relations']['edges']:
@@ -431,14 +398,12 @@ class AnimeCog(commands.Cog):
                             "relationType": relation
                         })
             
-            
             current_anime = {
                 "id": anime['id'],
                 "title": anime['title']['romaji'],
                 "season": anime['season'].title() if anime['season'] else None,
                 "seasonYear": anime['seasonYear']
             }
-            
             
             if related_seasons:
                 all_seasons = [current_anime] + related_seasons
@@ -472,24 +437,19 @@ class AnimeCog(commands.Cog):
             required=True
         )
     ):
-        """Display anime airing on the specified day"""
         try:
             await interaction.response.defer()
             
             now = datetime.now()
             
-            
             if day == "today":
-                
                 target_date = now.date()
                 day_name = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][target_date.weekday()]
             else:
-                
                 day_of_week = {
                     "monday": 0, "tuesday": 1, "wednesday": 2, 
                     "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6
                 }[day]
-                
                 
                 days_ahead = day_of_week - now.weekday()
                 if days_ahead < 0:  
@@ -498,10 +458,8 @@ class AnimeCog(commands.Cog):
                 target_date = now.date() + timedelta(days=days_ahead)
                 day_name = day.capitalize()
             
-            
             start_time = int(datetime.combine(target_date, datetime.min.time()).timestamp())
             end_time = int(datetime.combine(target_date, datetime.max.time()).timestamp())
-            
             
             anilist_query = '''
             query ($start: Int, $end: Int) {
@@ -534,7 +492,6 @@ class AnimeCog(commands.Cog):
                 await interaction.followup.send(f"Error retrieving anime data: {error_msg}")
                 return
            
-            
             if 'data' not in result or 'Page' not in result['data'] or 'airingSchedules' not in result['data']['Page']:
                 await interaction.followup.send("Error: Received unexpected data format from anime API. Please try again later.")
                 return
@@ -545,16 +502,12 @@ class AnimeCog(commands.Cog):
                 await interaction.followup.send(f"No anime scheduled to air on {day_name}.")
                 return
                 
-            
             embed = nextcord.Embed(title=f"Anime Airing on {day_name}", color=0x00A8FF)
-            
             
             episode_count = len(airing_shows)
             embed.description = f"{episode_count} {'episodes' if episode_count != 1 else 'episode'} scheduled"
             
-            
             sorted_anime = sorted(airing_shows, key=lambda x: x['airingAt'])
-            
             
             content = ""
             for airing in sorted_anime:
@@ -563,13 +516,10 @@ class AnimeCog(commands.Cog):
                 time_unix = airing['airingAt']
                 next_ep = airing['episode']
                 
-                
                 time_str = f"<t:{time_unix}:t>"
-                
                 
                 content += f"**{title}**\n"
                 content += f"Episode {next_ep} at {time_str}\n\n"
-                
                 
                 self.bot.loop.create_task(self.db.cache_anime({
                     'id': media['id'],
@@ -582,11 +532,9 @@ class AnimeCog(commands.Cog):
                     media['id'], next_ep, time_unix
                 ))
             
-            
             if len(content) <= 4096 - len(embed.description) - 2:  
                 embed.description = f"{embed.description}\n\n{content}"
             else:
-                
                 max_length = 4096 - len(embed.description) - 30  
                 truncated_content = content[:max_length]
                 last_newline = truncated_content.rfind('\n\n')
@@ -594,7 +542,6 @@ class AnimeCog(commands.Cog):
                     truncated_content = truncated_content[:last_newline]
                 
                 embed.description = f"{embed.description}\n\n{truncated_content}\n\n*...and more episodes not shown*"
-            
             
             date_str = target_date.strftime("%B %d, %Y")
             embed.set_footer(text=f"{day_name}, {date_str} • Data from AniList")
@@ -607,10 +554,8 @@ class AnimeCog(commands.Cog):
     
     @anime.subcommand(name="subscriptions", description="Manage your anime subscriptions")
     async def anime_subscriptions(self, interaction: nextcord.Interaction):
-        """View and manage your anime subscriptions"""
         try:
             await interaction.response.defer()
-            
             
             subscriptions = await self.db.get_user_subscriptions(interaction.user.id)
             
@@ -618,7 +563,6 @@ class AnimeCog(commands.Cog):
                 await interaction.followup.send("You don't have any anime subscriptions. Use `/anime search` to find and subscribe to anime.")
                 return
                 
-            
             paginator = SubscriptionPaginator(subscriptions, interaction.user.id, self.db)
             embed = await paginator.get_current_page_embed()
             
@@ -646,12 +590,9 @@ class AnimeCog(commands.Cog):
             required=False
         )
     ):
-        """Configure anime notification settings"""
         await interaction.response.defer(ephemeral=True)
         
-        
         settings = await self.db.get_user_settings(interaction.user.id)
-        
         
         if notifications is None and title_format is None:
             embed = nextcord.Embed(
@@ -673,16 +614,13 @@ class AnimeCog(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
         
-        
         updated = await self.db.update_user_settings(
             interaction.user.id,
             notification_enabled=notifications,
             preferred_title_format=title_format
         )
         
-        
         settings = await self.db.get_user_settings(interaction.user.id)
-        
         
         embed = nextcord.Embed(
             title="Anime Notification Settings Updated",
@@ -718,16 +656,13 @@ class AnimeCog(commands.Cog):
             required=False
         )
     ):
-        """Configure server-wide anime notification settings"""
         if not interaction.user.guild_permissions.manage_guild:
             await interaction.response.send_message("You need the 'Manage Server' permission to use this command.", ephemeral=True)
             return
             
         await interaction.response.defer(ephemeral=True)
         
-        
         settings = await self.db.get_guild_settings(interaction.guild.id)
-        
         
         if channel is None and public_notifications is None:
             current_channel = interaction.guild.get_channel(settings.get('notification_channel_id')) if settings.get('notification_channel_id') else None
@@ -751,7 +686,6 @@ class AnimeCog(commands.Cog):
             await interaction.followup.send(embed=embed, ephemeral=True)
             return
         
-        
         channel_id = channel.id if channel else None
         updated = await self.db.update_guild_settings(
             interaction.guild.id,
@@ -759,10 +693,8 @@ class AnimeCog(commands.Cog):
             public_notifications=public_notifications
         )
         
-        
         settings = await self.db.get_guild_settings(interaction.guild.id)
         current_channel = interaction.guild.get_channel(settings.get('notification_channel_id')) if settings.get('notification_channel_id') else None
-        
         
         embed = nextcord.Embed(
             title="Server Anime Notification Settings Updated",
@@ -784,9 +716,7 @@ class AnimeCog(commands.Cog):
 
     @tasks.loop(minutes=15)
     async def check_airing(self):
-        """Check for recently aired episodes and notify subscribers"""
         try:
-            
             aired_episodes = await self.db.get_recently_aired(hours_ago=1)
             
             if not aired_episodes:
@@ -800,12 +730,10 @@ class AnimeCog(commands.Cog):
                 url = ep['site_url']
                 cover_url = ep['cover_image_url']
                 
-                
                 subscribers = await self.db.get_anime_subscribers(anime_id)
                 
                 if not subscribers:
                     continue
-                
                 
                 embed = nextcord.Embed(
                     title=f"New Episode Alert!",
@@ -822,27 +750,22 @@ class AnimeCog(commands.Cog):
                 
                 embed.set_footer(text="You received this because you're subscribed to this anime.")
                 
-                
                 for sub in subscribers:
                     user_id = sub['user_id']
-                    
                     
                     settings = await self.db.get_user_settings(user_id)
                     if not settings.get('notification_enabled', True):
                         continue
                         
-                    
                     already_sent = await self.check_notification_sent(user_id, anime_id, episode)
                     if already_sent:
                         continue
-                    
                     
                     title_format = settings.get('preferred_title_format', 'romaji')
                     notification_embed = embed.copy()
                     
                     if title_format == 'english' and title_english:
                         notification_embed.description = f"Episode {episode} of {title_english} just aired!"
-                    
                     
                     try:
                         user = await self.bot.fetch_user(user_id)
@@ -852,14 +775,12 @@ class AnimeCog(commands.Cog):
                         print(f"Failed to DM user {user_id}: {e}")
                         await self.db.add_notification(user_id, anime_id, episode, successful=False)
                 
-                
                 for guild in self.bot.guilds:
                     settings = await self.db.get_guild_settings(guild.id)
                     
                     if not settings.get('public_notifications', False) or not settings.get('notification_channel_id'):
                         continue
                         
-                    
                     has_subscribers = False
                     for sub in subscribers:
                         member = guild.get_member(sub['user_id'])
@@ -870,7 +791,6 @@ class AnimeCog(commands.Cog):
                     if not has_subscribers:
                         continue
                         
-                    
                     channel = guild.get_channel(settings['notification_channel_id'])
                     if channel:
                         try:

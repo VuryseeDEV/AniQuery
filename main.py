@@ -6,13 +6,18 @@ import sys
 from dotenv import load_dotenv
 import traceback
 
-
+# Get the absolute path of the directory containing this file
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 COGS_DIR = os.path.join(BASE_DIR, "cogs")
 
-
+# Debug token loading
 load_dotenv(os.path.join(BASE_DIR, "tkn.env"))
 token = os.getenv("BOT_TOKEN")
+print(f"Token loaded: {'SUCCESS' if token else 'FAILED'}")
+print(f"Working directory: {os.getcwd()}")
+print(f"Base directory: {BASE_DIR}")
+print(f"Cogs directory: {COGS_DIR}")
+print(f"Cogs directory exists: {os.path.exists(COGS_DIR)}")
 
 intents = nextcord.Intents.default()
 intents.members = True
@@ -23,15 +28,16 @@ bot = commands.Bot(command_prefix="$", intents=intents)
 
 async def set_rich_presence():
     activity = nextcord.Activity(
-        type=nextcord.ActivityType.watching,
+        type=nextcord.ActivityType.listening,
         name="/anime",)
     await bot.change_presence(status=nextcord.Status.dnd, activity=activity)
 
 @bot.event
 async def on_ready():
-    print(f"========================================\nLogged in as {bot.user} (ID: {bot.user.id})")
+    print(f"Logged in as {bot.user} (ID: {bot.user.id})")
     await set_rich_presence()
-
+    
+    # Sync commands with Discord on startup
     print("Syncing application commands...")
     for guild in bot.guilds:
         try:
@@ -56,6 +62,7 @@ async def on_guild_join(guild):
         print(f"Failed to sync commands to {guild.name}: {e}")
 
 async def load_cogs():
+
     if not os.path.exists(COGS_DIR):
         try:
             os.makedirs(COGS_DIR)
@@ -64,7 +71,7 @@ async def load_cogs():
             print(f"Failed to create cogs directory: {e}")
             return
     
-    
+    # Load cogs directly in the cogs folder
     for filename in os.listdir(COGS_DIR):
         if filename.endswith(".py"):
             try:
@@ -74,11 +81,11 @@ async def load_cogs():
                 print(f"Failed to load cog {filename}: {e}")
                 print(traceback.format_exc())
     
-    
+    # Load cogs from subfolders
     for foldername in os.listdir(COGS_DIR):
         folder_path = os.path.join(COGS_DIR, foldername)
         if os.path.isdir(folder_path):
-            
+            # Make sure there's an __init__.py file
             init_file = os.path.join(folder_path, "__init__.py")
             if not os.path.exists(init_file):
                 try:
