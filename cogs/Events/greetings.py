@@ -7,12 +7,12 @@ from PIL import Image
 import json
 import os
 import sqlite3
+import pathlib
 
 class GreetingModal(ui.Modal):
     def __init__(self, title, message_type, callback_func, default_text=""):
         super().__init__(title)
         self.message_type = message_type
-        
         self.callback_func = callback_func
         
         self.message = ui.TextInput(
@@ -34,27 +34,28 @@ class GreetingModal(ui.Modal):
         self.add_item(self.image_url)
 
     async def callback(self, interaction: Interaction):
-        
         await self.callback_func(interaction, self.message_type, self.message.value, self.image_url.value)
 
 class MemberEvents(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.session = aiohttp.ClientSession()
+        
+        # Ensure data directory exists
+        data_dir = pathlib.Path("data")
+        data_dir.mkdir(exist_ok=True)
+        
         self.db_file = "data/greetings.db"
         self._setup_database()
         self._load_settings()
 
     def cog_unload(self):
-        
         if self.session and not self.session.closed:
             self.bot.loop.create_task(self.session.close())
 
     def _setup_database(self):
-        """Get our database ready for storing messages and settings"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
-        
         
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS greeting_channels (
@@ -62,7 +63,6 @@ class MemberEvents(commands.Cog):
             channel_id TEXT
         )
         ''')
-        
         
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS greeting_messages (
@@ -78,18 +78,15 @@ class MemberEvents(commands.Cog):
         conn.close()
     
     def _load_settings(self):
-        
         self.greeting_channels = {}  
         self.greeting_messages = {}  
         
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
-        
         cursor.execute("SELECT guild_id, channel_id FROM greeting_channels")
         for guild_id, channel_id in cursor.fetchall():
             self.greeting_channels[guild_id] = channel_id
-        
         
         cursor.execute("SELECT guild_id, type, message, image_url FROM greeting_messages")
         for guild_id, msg_type, message, image_url in cursor.fetchall():
@@ -104,7 +101,6 @@ class MemberEvents(commands.Cog):
         conn.close()
     
     def _save_channel(self, guild_id, channel_id):
-        
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
@@ -116,11 +112,9 @@ class MemberEvents(commands.Cog):
         conn.commit()
         conn.close()
         
-        
         self.greeting_channels[str(guild_id)] = str(channel_id)
     
     def _save_message(self, guild_id, message_type, message, image_url):
-        """Save a custom message for a server"""
         conn = sqlite3.connect(self.db_file)
         cursor = conn.cursor()
         
@@ -132,7 +126,6 @@ class MemberEvents(commands.Cog):
         conn.commit()
         conn.close()
         
-        
         if str(guild_id) not in self.greeting_messages:
             self.greeting_messages[str(guild_id)] = {}
         
@@ -142,10 +135,8 @@ class MemberEvents(commands.Cog):
         }
     
     def _get_message(self, guild_id, message_type):
-   
         guild_id = str(guild_id)
         
-        # Our fallback friendly messages if nothing is set
         defaults = {
             "welcome": {
                 "message": "Welcome {user} to {server}! We're happy to have you here.",
@@ -157,7 +148,6 @@ class MemberEvents(commands.Cog):
             }
         }
         
-        # Use default if this server hasn't set anything custom
         if (guild_id not in self.greeting_messages or 
             message_type not in self.greeting_messages[guild_id]):
             return defaults[message_type]
@@ -166,7 +156,6 @@ class MemberEvents(commands.Cog):
 
     @nextcord.slash_command(name="greetings", description="Configure welcome and goodbye messages")
     async def greetings(self, interaction: nextcord.Interaction):
-       
         pass
 
     @greetings.subcommand(name="channel", description="Set the welcome/goodbye message channel")
@@ -180,7 +169,6 @@ class MemberEvents(commands.Cog):
             required=True
         )
     ):
-        # Make sure they picked a text channel, not voice or category
         if not isinstance(channel, nextcord.TextChannel):
             await interaction.response.send_message("Please select a text channel!", ephemeral=True)
             return
@@ -196,7 +184,6 @@ class MemberEvents(commands.Cog):
     @greetings.subcommand(name="welcome", description="Customize welcome message")
     @commands.has_permissions(administrator=True)
     async def customize_welcome(self, interaction: nextcord.Interaction):
-        
         guild_id = interaction.guild.id
         current_msg = self._get_message(guild_id, "welcome")
         
@@ -212,7 +199,6 @@ class MemberEvents(commands.Cog):
     @greetings.subcommand(name="goodbye", description="Customize goodbye message")
     @commands.has_permissions(administrator=True)
     async def customize_goodbye(self, interaction: nextcord.Interaction):
-        
         guild_id = interaction.guild.id
         current_msg = self._get_message(guild_id, "goodbye")
         
@@ -237,10 +223,8 @@ class MemberEvents(commands.Cog):
             required=True
         )
     ):
-        
         guild_id = interaction.guild.id
         
-        # Make sure a channel is set first
         if str(guild_id) not in self.greeting_channels:
             await interaction.response.send_message(
                 "Please set a greeting channel first using `/greetings channel`!", 
@@ -252,7 +236,6 @@ class MemberEvents(commands.Cog):
         
         member = interaction.user
         
-        # Send the appropriate test message
         if message_type == "welcome":
             await self.send_welcome_message(member)
         else:
@@ -264,7 +247,6 @@ class MemberEvents(commands.Cog):
         )
 
     async def save_greeting_message(self, interaction, message_type, message, image_url):
-        """Saves the message after the user submits the form"""
         guild_id = interaction.guild.id
         self._save_message(guild_id, message_type, message, image_url)
         
@@ -275,20 +257,16 @@ class MemberEvents(commands.Cog):
 
     @commands.Cog.listener()
     async def on_member_join(self, member):
-        """Someone joined - send them a nice welcome!"""
         await self.send_welcome_message(member)
             
     @commands.Cog.listener()
     async def on_member_remove(self, member):
-        """Someone left - send a goodbye message"""
         await self.send_goodbye_message(member)
     
     async def send_welcome_message(self, member):
-        """Creates and sends a welcome message with a nice image"""
         guild = member.guild
         guild_id = str(guild.id)
         
-        # Check if this server has set up a channel
         if guild_id not in self.greeting_channels:
             return
             
@@ -299,15 +277,15 @@ class MemberEvents(commands.Cog):
             return
             
         try:
-            
             msg_config = self._get_message(guild_id, "welcome")
             message = msg_config["message"]
             image_url = msg_config["image_url"]
             
-            
             message = message.replace("{user}", member.mention)
             message = message.replace("{server}", guild.name)
             
+            # Get the member count for the server
+            member_count = guild.member_count
             
             embed = Embed(
                 title=f"Welcome to {guild.name}",
@@ -315,15 +293,24 @@ class MemberEvents(commands.Cog):
                 color=nextcord.Color.red()
             )
             
-            
+            # Add the member count to the footer
+            embed.set_footer(text=f"You are our {member_count}th member!")
             embed.set_thumbnail(url=member.display_avatar.url)
             
-            
+            # Check if a custom image URL is provided and valid
+            valid_img = False
             if image_url and image_url.strip():
-                embed.set_image(url=image_url)
-                await channel.send(embed=embed)
-            else:
-                
+                try:
+                    # Validate image URL by attempting to fetch it
+                    async with self.session.head(image_url, timeout=5) as resp:
+                        if resp.status == 200:
+                            embed.set_image(url=image_url)
+                            valid_img = True
+                except:
+                    valid_img = False
+            
+            if not valid_img:
+                # Fall back to generated image if custom URL is invalid
                 welcome_image = await self.create_welcome_image(member)
                 embed.set_image(url="attachment://greeting_banner.png")
                 
@@ -331,16 +318,16 @@ class MemberEvents(commands.Cog):
                     embed=embed,
                     file=File(welcome_image, filename="greeting_banner.png")
                 )
+            else:
+                await channel.send(embed=embed)
             
         except Exception as e:
-            print(f"Oops, couldn't send welcome message: {e}")
+            print(f"Error sending welcome message: {e}")
     
     async def send_goodbye_message(self, member):
-        
         guild = member.guild
         guild_id = str(guild.id)
         
-        # Check if this server has set up a channel
         if guild_id not in self.greeting_channels:
             return
             
@@ -351,15 +338,12 @@ class MemberEvents(commands.Cog):
             return
             
         try:
-            # Get the server's custom message 
             msg_config = self._get_message(guild_id, "goodbye")
             message = msg_config["message"]
             image_url = msg_config["image_url"]
             
-            
             message = message.replace("{user}", member.mention)
             message = message.replace("{server}", guild.name)
-            
             
             embed = Embed(
                 title=f"Goodbye from {guild.name}",
@@ -367,15 +351,25 @@ class MemberEvents(commands.Cog):
                 color=nextcord.Color.red()
             )
             
-            
+            # Add current member count to footer after someone left
+            member_count = guild.member_count
+            embed.set_footer(text=f"We now have {member_count} members")
             embed.set_thumbnail(url=member.display_avatar.url)
             
-            
+            # Check if a custom image URL is provided and valid
+            valid_img = False
             if image_url and image_url.strip():
-                embed.set_image(url=image_url)
-                await channel.send(embed=embed)
-            else:
-                
+                try:
+                    # Validate image URL by attempting to fetch it
+                    async with self.session.head(image_url, timeout=5) as resp:
+                        if resp.status == 200:
+                            embed.set_image(url=image_url)
+                            valid_img = True
+                except:
+                    valid_img = False
+            
+            if not valid_img:
+                # Fall back to generated image if custom URL is invalid
                 goodbye_image = await self.create_goodbye_image(member)
                 embed.set_image(url="attachment://greeting_banner.png")
                 
@@ -383,40 +377,35 @@ class MemberEvents(commands.Cog):
                     embed=embed,
                     file=File(goodbye_image, filename="greeting_banner.png")
                 )
+            else:
+                await channel.send(embed=embed)
             
         except Exception as e:
-            print(f"Oops, couldn't send goodbye message: {e}")
+            print(f"Error sending goodbye message: {e}")
 
     async def create_welcome_image(self, member):
-        """Makes a pretty welcome image with the user's avatar"""
         try:
-            
             background_image_path = "assets/welcome_banner.jpg"
             if not os.path.exists(background_image_path):
-                
                 return await self.create_default_greeting_image(member, "welcome")
                 
             return await self.create_greeting_image(member, background_image_path)
         except Exception as e:
-            print(f"Couldn't create the welcome image: {e}")
+            print(f"Error creating welcome image: {e}")
             return await self.create_default_greeting_image(member, "welcome")
 
     async def create_goodbye_image(self, member):
-        """Makes a pretty goodbye image with the user's avatar"""
         try:
-            
             background_image_path = "assets/goodbye_banner.jpg"
             if not os.path.exists(background_image_path):
-                
                 return await self.create_default_greeting_image(member, "goodbye")
                 
             return await self.create_greeting_image(member, background_image_path)
         except Exception as e:
-            print(f"Couldn't create the goodbye image: {e}")
+            print(f"Error creating goodbye image: {e}")
             return await self.create_default_greeting_image(member, "goodbye")
 
     async def create_greeting_image(self, member, background_path):
-        """Creates an image with a background and the user's avatar in the middle"""
         try:
             img = Image.open(background_path)
             img = img.resize((600, 200))  
@@ -453,17 +442,15 @@ class MemberEvents(commands.Cog):
             
             return byte_io
         except Exception as e:
-            print(f"Problem making the image: {e}")
+            print(f"Error in create_greeting_image: {e}")
             return await self.create_default_greeting_image(member, "greeting")
 
     async def create_default_greeting_image(self, member, message_type):
-       
         try:
-            
             if message_type == "welcome":
-                bg_color = (67, 181, 129)  
+                bg_color = (67, 181, 129)  # Discord green
             else:
-                bg_color = (240, 71, 71)  
+                bg_color = (240, 71, 71)  # Discord red
             
             background = Image.new("RGBA", (600, 200), bg_color)
             
@@ -493,7 +480,7 @@ class MemberEvents(commands.Cog):
             
             return byte_io
         except Exception as e:
-            print(f"Couldn't even create a simple image: {e}")
+            print(f"Error in default greeting image: {e}")
             # Last-ditch fallback - just a gray box
             fallback = Image.new("RGB", (600, 200), (47, 49, 54))  # Discord dark theme color
             byte_io = BytesIO()
@@ -502,7 +489,6 @@ class MemberEvents(commands.Cog):
             return byte_io
 
     async def get_avatar_image(self, url):
-        
         try:
             async with self.session.get(url) as response:
                 if response.status == 200:
@@ -519,11 +505,10 @@ class MemberEvents(commands.Cog):
                         
                     return avatar_img
                 else:
-                   
                     default = Image.new("RGBA", (100, 100), (128, 128, 128, 255))
                     return default
         except Exception as e:
-            print(f"Couldn't get the user's profile pic: {e}")
+            print(f"Error getting avatar image: {e}")
             # Use a placeholder if anything goes wrong
             default = Image.new("RGBA", (100, 100), (128, 128, 128, 255))
             return default
