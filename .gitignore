@@ -1,5 +1,6 @@
 tkn.env
 *.db
 *.pyc
-/data
-/utils
+data/
+utils/
+*.json

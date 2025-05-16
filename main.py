@@ -6,11 +6,9 @@ import sys
 from dotenv import load_dotenv
 import traceback
 
-# Get the absolute path of the directory containing this file
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 COGS_DIR = os.path.join(BASE_DIR, "cogs")
-
-# Debug token loading
+#Logging and checks ts
 load_dotenv(os.path.join(BASE_DIR, "tkn.env"))
 token = os.getenv("BOT_TOKEN")
 print(f"Token loaded: {'SUCCESS' if token else 'FAILED'}")
